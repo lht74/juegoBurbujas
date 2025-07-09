@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">Burbujas Game</string>
+    <string name="game_title">🫧 Burbujas Multiplicadoras</string>
+    <string name="game_subtitle">¡Revienta las burbujas con los múltiplos correctos!</string>
+    <string name="table_selection_prompt">Selecciona tu tabla:</string>
+    <string name="table_button_prefix">×</string>
+    <string name="score_label">Puntaje: %1$d</string>
+    <string name="streak_label">Racha: %1$d</string>
+    <string name="time_label">⏰ %1$d s</string>
+    <string name="table_of_label">Tabla del %1$d</string>
+    <string name="exit_button_emoji">❌</string>
+    <string name="game_over_title">¡Juego Terminado!</string>
+    <string name="final_score_label">Puntaje Final</string>
+    <string name="stars_emoji">⭐</string>
+    <string name="retry_button">🔄 Reintentar</string>
+    <string name="menu_button">🏠 Menú</string>
+</resources>
