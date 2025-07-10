@@ -1,15 +1,32 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# Created by Gemini for Android Projects
+
+# Gradle
+.gradle/
+build/
+
+# Local configuration
 local.properties
+
+# IDE files (Android Studio)
+*.iml
+.idea/
+!.idea/misc.xml
+!/.idea/inspectionProfiles/
+!/.idea/runConfigurations/
+
+# Distribution files
+*.apk
+*.aab
+*.ap_
+
+# Profiler files
+*.hprof
+*.hprof-conv
+
+# Native build files
+.cxx/
+.externalNativeBuild/
+
+# Other
+captures/
+.DS_Store
