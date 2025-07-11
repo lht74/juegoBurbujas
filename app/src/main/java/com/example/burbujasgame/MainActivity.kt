@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -101,7 +102,8 @@ data class Burbuja(
     val y: Float,
     val velocidad: Float,
     val color: Color,
-    val esMultiplo: Boolean
+    val esMultiplo: Boolean,
+    val mostrarError: Boolean = false // ← nuevo campo para efecto visual
 )
 
 data class EstadoJuego(
@@ -214,15 +216,26 @@ class GameViewModel : ViewModel() {
             )
         } else {
             val nuevasVidas = _estado.value.vidas - 1
+            val nuevasBurbujas = _estado.value.burbujas.map {
+                if (it.id == burbuja.id) it.copy(mostrarError = true) else it
+            }
             _estado.value = _estado.value.copy(
                 puntaje = maxOf(0, _estado.value.puntaje - 5),
                 vidas = nuevasVidas,
                 racha = 0,
-                burbujas = _estado.value.burbujas.filter { it.id != burbuja.id }
+                burbujas = nuevasBurbujas
             )
-            if (nuevasVidas <= 0) terminarJuego(tabla, onJuegoTerminado)
+
+            viewModelScope.launch {
+                delay(500) // Mostrar animación de error durante 500ms
+                _estado.value = _estado.value.copy(
+                    burbujas = _estado.value.burbujas.filter { it.id != burbuja.id }
+                )
+                if (nuevasVidas <= 0) terminarJuego(tabla, onJuegoTerminado)
+            }
         }
     }
+
 
     private fun terminarJuego(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
         if (!juegoActivo) return
@@ -471,18 +484,25 @@ fun ComponenteBurbuja(
         label = ""
     )
 
-    // Tamaño aleatorio al crear el componente
     val baseSize = 60.dp
     val scaleFactor = remember { Random.nextDouble(1.0, 1.5).toFloat() }
     val bubbleSize = baseSize * scaleFactor
 
-    // Click animado con rebote
     var clicked by remember { mutableStateOf(false) }
     val animatedClickScale by animateFloatAsState(
         targetValue = if (clicked) 0.7f else 1f,
         animationSpec = tween(150),
         label = ""
     )
+
+    // Halo rojo animado cuando hay error
+    val haloAlpha = remember { Animatable(0f) }
+    if (burbuja.mostrarError) {
+        LaunchedEffect(burbuja.id) {
+            haloAlpha.animateTo(0.8f, tween(200))
+            haloAlpha.animateTo(0f, tween(300))
+        }
+    }
 
     LaunchedEffect(clicked) {
         if (clicked) {
@@ -495,15 +515,21 @@ fun ComponenteBurbuja(
         modifier = Modifier
             .offset(x = x - bubbleSize / 2, y = y - bubbleSize / 2)
             .size(bubbleSize)
-            .scale(animatedClickScale)
-            .shadow(elevation = 8.dp, shape = CircleShape, ambientColor = burbuja.color, spotColor = burbuja.color)
-            .clickable {
-                onClick()
-                clicked = true
-            },
+            .scale(animatedClickScale),
         contentAlignment = Alignment.Center
     ) {
-        // Fondo con rotación y gradiente
+        // Halo rojo (solo si mostrarError)
+        if (burbuja.mostrarError) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .background(Color.Red.copy(alpha = haloAlpha.value))
+                    .blur(16.dp)
+            )
+        }
+
+        // Fondo rotante con gradiente
         Box(
             modifier = Modifier
                 .matchParentSize()
@@ -522,9 +548,13 @@ fun ComponenteBurbuja(
                     )
                 )
                 .border(width = 2.dp, color = Color.White.copy(alpha = 0.3f), shape = CircleShape)
+                .clickable {
+                    onClick()
+                    clicked = true
+                }
         )
 
-        // Número con efecto glow
+        // Número
         Text(
             text = burbuja.numero.toString(),
             fontSize = 26.sp,
@@ -539,7 +569,7 @@ fun ComponenteBurbuja(
             color = Color.White
         )
 
-        // Reflejo animado (no rotativo)
+        // Reflejo
         Box(
             modifier = Modifier
                 .offset(x = 15.dp, y = (-15).dp)
@@ -553,6 +583,7 @@ fun ComponenteBurbuja(
         )
     }
 }
+
 
 @Composable
 fun ResultsScreen(
