@@ -176,7 +176,7 @@ class GameViewModel : ViewModel() {
             tabla * (Random.nextInt(1, 11)) // Número entre tabla*1 y tabla*10
         } else {
             // Número aleatorio que NO es múltiplo de la tabla
-            var num = 1 + tabla * Random.nextInt(0, 11)
+            var num = Random.nextInt(1, tabla) + tabla * Random.nextInt(0, 11)
 
             num
         }
