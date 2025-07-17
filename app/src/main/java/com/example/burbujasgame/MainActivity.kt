@@ -39,6 +39,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.burbujasgame.SoundManager.playMissing
 import com.example.burbujasgame.ui.theme.BurbujasGameTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -49,15 +50,24 @@ import kotlin.random.Random
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        SoundManager.init(this)
+        SoundManager.startMusic(this, R.raw.music)
+
         setContent {
             BurbujasGameTheme {
                 BurbujasGameApp()
             }
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        SoundManager.release()
+    }
 }
 
-// --- Lógica de Navegación ---
+    // --- Lógica de Navegación ---
 @Composable
 fun BurbujasGameApp() {
     val navController = rememberNavController()
@@ -122,16 +132,19 @@ class GameViewModel : ViewModel() {
     private var bubbleJob: Job? = null
     private var gameLoopJob: Job? = null
     private var juegoActivo = false
+    private var burbujasEscapadasCount = 0
+    private var _tablaSeleccionada = 2
     companion object {
         private val colorBurbuja = Color(0xFF4A90E2) // Azul bonito
     }
     fun iniciarJuego(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
         if (juegoActivo) return // Evitar múltiples inicios
         juegoActivo = true
+        _tablaSeleccionada = tabla // 👈 Guardamos la tabla actual
         _estado.value = EstadoJuego()
         iniciarTimer(tabla, onJuegoTerminado)
         iniciarGeneracionBurbujas(tabla)
-        iniciarBucleJuego()
+        iniciarBucleJuego(onJuegoTerminado) // ✅ Callback pasa aquí
     }
 
     private fun iniciarTimer(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
@@ -159,12 +172,12 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun iniciarBucleJuego() {
+    private fun iniciarBucleJuego(onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
         gameLoopJob?.cancel()
         gameLoopJob = viewModelScope.launch {
             while (juegoActivo) {
                 delay(50)
-                if (juegoActivo) actualizarBurbujas()
+                if (juegoActivo) actualizarBurbujas(onJuegoTerminado)
             }
         }
     }
@@ -196,17 +209,40 @@ class GameViewModel : ViewModel() {
         _estado.value = _estado.value.copy(burbujas = _estado.value.burbujas + nuevaBurbuja)
     }
 
-    private fun actualizarBurbujas() {
+    private fun actualizarBurbujas(onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
         val burbujasActualizadas = _estado.value.burbujas.mapNotNull { burbuja ->
             val nuevaY = burbuja.y - burbuja.velocidad * 0.01f
-            if (nuevaY > -0.2f) burbuja.copy(y = nuevaY) else null
+            if (nuevaY > 0.0f) burbuja.copy(y = nuevaY) else  {
+                // Burbuja escapó
+                if (burbuja.esMultiplo) {
+                    // Reproducimos el sonido "missing"
+                    playMissing() // 👈 Sonido missing
+                    burbujasEscapadasCount++
+                    if (burbujasEscapadasCount % 3 == 0) { // Cada 3 burbujas escapadas
+                        // Restamos una vida
+                        val nuevasVidas = _estado.value.vidas - 1
+                        _estado.value = _estado.value.copy(
+                            vidas = _estado.value.vidas - 1,
+                            racha = 0
+                        )
+                        if (nuevasVidas <= 0) {
+                            terminarJuego(tabla=_tablaSeleccionada, onJuegoTerminado)
+                        }
+                    }
+                }
+                null
+            }
         }
         _estado.value = _estado.value.copy(burbujas = burbujasActualizadas)
     }
 
-    fun tocarBurbuja(burbuja: Burbuja, tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
+    fun tocarBurbuja(burbuja: Burbuja,
+                     tabla: Int,
+                     reproducirSonido: (correcta: Boolean) -> Unit,
+                     onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
         if (!juegoActivo) return
         if (burbuja.esMultiplo) {
+            reproducirSonido(true)
             val nuevaRacha = _estado.value.racha + 1
             val puntosExtra = if (nuevaRacha >= 5) 10 else 0
             _estado.value = _estado.value.copy(
@@ -215,6 +251,7 @@ class GameViewModel : ViewModel() {
                 burbujas = _estado.value.burbujas.filter { it.id != burbuja.id }
             )
         } else {
+            reproducirSonido(false)
             val nuevasVidas = _estado.value.vidas - 1
             val nuevasBurbujas = _estado.value.burbujas.map {
                 if (it.id == burbuja.id) it.copy(mostrarError = true) else it
@@ -235,6 +272,7 @@ class GameViewModel : ViewModel() {
             }
         }
     }
+
 
 
     private fun terminarJuego(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
@@ -259,6 +297,11 @@ class GameViewModel : ViewModel() {
         bubbleJob?.cancel()
         gameLoopJob?.cancel()
     }
+
+
+
+
+
 }
 
 
@@ -351,11 +394,11 @@ fun GameScreen(
 ) {
     val estado by viewModel.estado
 
+    // Iniciar el juego al entrar a la pantalla
     LaunchedEffect(key1 = tabla) {
         viewModel.iniciarJuego(tabla) { puntaje, estrellas ->
-            // Navegar a resultados sin volver a agregar a la pila
             navController.navigate("resultados/$puntaje/$estrellas/$tabla") {
-                popUpTo("menu") // Limpia la pila hasta el menú
+                popUpTo("menu")
             }
         }
     }
@@ -420,11 +463,19 @@ fun GameScreen(
                     x = maxWidth * burbuja.x,
                     y = maxHeight * burbuja.y,
                     onClick = {
-                        viewModel.tocarBurbuja(burbuja, tabla) { puntaje, estrellas ->
-                            navController.navigate("resultados/$puntaje/$estrellas/$tabla") {
-                                popUpTo("menu")
+                        // ✅ Aquí modificamos el llamado
+                        viewModel.tocarBurbuja(
+                            burbuja = burbuja,
+                            tabla = tabla,
+                            onJuegoTerminado = { puntaje, estrellas ->
+                                navController.navigate("resultados/$puntaje/$estrellas/$tabla") {
+                                    popUpTo("menu")
+                                }
+                            },
+                            reproducirSonido = { correcta ->
+                                SoundManager.playEffect(if (correcta) "good" else "bad")
                             }
-                        }
+                        )
                     }
                 )
             }
@@ -442,6 +493,7 @@ fun GameScreen(
         }
     }
 }
+
 
 @Composable
 fun ComponenteBurbuja(
@@ -525,7 +577,7 @@ fun ComponenteBurbuja(
                     .matchParentSize()
                     .clip(CircleShape)
                     .background(Color.Red.copy(alpha = haloAlpha.value))
-                    .blur(16.dp)
+                    .blur(24.dp)
             )
         }
 
