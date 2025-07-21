@@ -14,4 +14,6 @@
     <string name="stars_emoji">⭐</string>
     <string name="retry_button">🔄 Reintentar</string>
     <string name="menu_button">🏠 Menú</string>
+    <string name="multiples_missed_title">Múltiplos que dejaste escapar:</string>
+
 </resources>

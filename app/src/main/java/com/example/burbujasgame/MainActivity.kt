@@ -44,6 +44,7 @@ import com.example.burbujasgame.ui.theme.BurbujasGameTheme
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.pow
 import kotlin.random.Random
 
 // --- MainActivity: Punto de entrada y configuración del tema y navegación ---
@@ -67,7 +68,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-    // --- Lógica de Navegación ---
+// --- Lógica de Navegación ---
 @Composable
 fun BurbujasGameApp() {
     val navController = rememberNavController()
@@ -83,26 +84,37 @@ fun BurbujasGameApp() {
             GameScreen(navController = navController, tabla = tabla)
         }
         composable(
-            route = "resultados/{puntaje}/{estrellas}/{tabla}",
+            route = "resultados/{puntaje}/{estrellas}/{tabla}?multiplesPerdidos={multiplesPerdidos}",
             arguments = listOf(
                 navArgument("puntaje") { type = NavType.IntType },
                 navArgument("estrellas") { type = NavType.IntType },
-                navArgument("tabla") { type = NavType.IntType }
+                navArgument("tabla") { type = NavType.IntType },
+                navArgument("multiplesPerdidos") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
             )
         ) { backStackEntry ->
             val puntaje = backStackEntry.arguments?.getInt("puntaje") ?: 0
             val estrellas = backStackEntry.arguments?.getInt("estrellas") ?: 0
             val tabla = maxOf(2, backStackEntry.arguments?.getInt("tabla") ?: 2)
+            val multiplesPerdidosString = backStackEntry.arguments?.getString("multiplesPerdidos") ?: ""
+            val multiplesPerdidos = if (multiplesPerdidosString.isEmpty()) {
+                emptyList()
+            } else {
+                multiplesPerdidosString.split(",").mapNotNull { it.toIntOrNull() }
+            }
+
             ResultsScreen(
                 navController = navController,
                 puntaje = puntaje,
                 estrellas = estrellas,
-                tabla = tabla
+                tabla = tabla,
+                multiplesPerdidos = multiplesPerdidos
             )
         }
     }
 }
-
 
 // --- Modelos de Datos y ViewModel ---
 data class Burbuja(
@@ -120,6 +132,8 @@ data class EstadoJuego(
     val puntaje: Int = 0,
     val vidas: Int = 3,
     val racha: Int = 0,
+    val tiempoTranscurrido: Float = 0f, // Nuevo campo para poder calucular la velocidad
+    val multiplesPerdidos: List<Int> = emptyList(), //  Para registrar los multiples perdidos
     val tiempoRestante: Int = 60,
     val burbujas: List<Burbuja> = emptyList()
 )
@@ -134,26 +148,31 @@ class GameViewModel : ViewModel() {
     private var juegoActivo = false
     private var burbujasEscapadasCount = 0
     private var _tablaSeleccionada = 2
+
     companion object {
         private val colorBurbuja = Color(0xFF4A90E2) // Azul bonito
     }
-    fun iniciarJuego(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
+
+    fun iniciarJuego(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int, multiplesPerdidos: List<Int>) -> Unit) {
         if (juegoActivo) return // Evitar múltiples inicios
         juegoActivo = true
-        _tablaSeleccionada = tabla // 👈 Guardamos la tabla actual
+        _tablaSeleccionada = tabla
         _estado.value = EstadoJuego()
         iniciarTimer(tabla, onJuegoTerminado)
         iniciarGeneracionBurbujas(tabla)
-        iniciarBucleJuego(onJuegoTerminado) // ✅ Callback pasa aquí
+        iniciarBucleJuego(onJuegoTerminado)
     }
 
-    private fun iniciarTimer(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
+    private fun iniciarTimer(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int, multiplesPerdidos: List<Int>) -> Unit) {
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (juegoActivo && _estado.value.tiempoRestante > 0) {
                 delay(1000)
                 if (juegoActivo) {
-                    _estado.value = _estado.value.copy(tiempoRestante = _estado.value.tiempoRestante - 1)
+                    _estado.value = _estado.value.copy(
+                        tiempoRestante = _estado.value.tiempoRestante - 1,
+                        tiempoTranscurrido = _estado.value.tiempoTranscurrido + 1f
+                    )
                 }
             }
             if (juegoActivo) terminarJuego(tabla, onJuegoTerminado)
@@ -172,7 +191,7 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun iniciarBucleJuego(onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
+    private fun iniciarBucleJuego(onJuegoTerminado: (puntaje: Int, estrellas: Int, multiplesPerdidos: List<Int>) -> Unit) {
         gameLoopJob?.cancel()
         gameLoopJob = viewModelScope.launch {
             while (juegoActivo) {
@@ -183,50 +202,46 @@ class GameViewModel : ViewModel() {
     }
 
     private fun generarBurbuja(tabla: Int) {
-        // Decidimos si será correcto o no (80% correcto, 20% incorrecto)
         val esCorrecto = Random.nextFloat() < 0.8f
-
         val numero = if (esCorrecto) {
-            // Múltiplo correcto de la tabla
-            tabla * (Random.nextInt(1, 11)) // Número entre tabla*1 y tabla*10
+            tabla * (Random.nextInt(1, 11))
         } else {
-            // Número aleatorio que NO es múltiplo de la tabla
             var num = Random.nextInt(1, tabla) + tabla * Random.nextInt(0, 11)
-
             num
         }
-
         val nuevaBurbuja = Burbuja(
             id = contadorBurbujas++,
             numero = numero,
             x = Random.nextFloat() * 0.8f + 0.1f,
             y = 1.1f,
             velocidad = Random.nextFloat() * 0.5f + 0.5f,
-            color = colorBurbuja, // Color único, ver abajo
+            color = colorBurbuja,
             esMultiplo = numero % tabla == 0
         )
-
         _estado.value = _estado.value.copy(burbujas = _estado.value.burbujas + nuevaBurbuja)
     }
 
-    private fun actualizarBurbujas(onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
+    private fun actualizarBurbujas(onJuegoTerminado: (puntaje: Int, estrellas: Int, multiplesPerdidos: List<Int>) -> Unit) {
         val burbujasActualizadas = _estado.value.burbujas.mapNotNull { burbuja ->
-            val nuevaY = burbuja.y - burbuja.velocidad * 0.01f
-            if (nuevaY > 0.0f) burbuja.copy(y = nuevaY) else  {
-                // Burbuja escapó
+            val factorVelocidad = 1.02f.pow(_estado.value.tiempoTranscurrido)
+            val nuevaY = burbuja.y - burbuja.velocidad * 0.01f * factorVelocidad
+            if (nuevaY > 0.0f) {
+                burbuja.copy(y = nuevaY)
+            } else {
                 if (burbuja.esMultiplo) {
-                    // Reproducimos el sonido "missing"
-                    playMissing() // 👈 Sonido missing
+                    playMissing()
+                    _estado.value = _estado.value.copy(
+                        multiplesPerdidos = _estado.value.multiplesPerdidos + burbuja.numero
+                    )
                     burbujasEscapadasCount++
-                    if (burbujasEscapadasCount % 3 == 0) { // Cada 3 burbujas escapadas
-                        // Restamos una vida
+                    if (burbujasEscapadasCount % 3 == 0) {
                         val nuevasVidas = _estado.value.vidas - 1
                         _estado.value = _estado.value.copy(
-                            vidas = _estado.value.vidas - 1,
+                            vidas = nuevasVidas,
                             racha = 0
                         )
                         if (nuevasVidas <= 0) {
-                            terminarJuego(tabla=_tablaSeleccionada, onJuegoTerminado)
+                            terminarJuego(tabla = _tablaSeleccionada, onJuegoTerminado)
                         }
                     }
                 }
@@ -236,10 +251,12 @@ class GameViewModel : ViewModel() {
         _estado.value = _estado.value.copy(burbujas = burbujasActualizadas)
     }
 
-    fun tocarBurbuja(burbuja: Burbuja,
-                     tabla: Int,
-                     reproducirSonido: (correcta: Boolean) -> Unit,
-                     onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
+    fun tocarBurbuja(
+        burbuja: Burbuja,
+        tabla: Int,
+        reproducirSonido: (correcta: Boolean) -> Unit,
+        onJuegoTerminado: (puntaje: Int, estrellas: Int, multiplesPerdidos: List<Int>) -> Unit
+    ) {
         if (!juegoActivo) return
         if (burbuja.esMultiplo) {
             reproducirSonido(true)
@@ -262,9 +279,8 @@ class GameViewModel : ViewModel() {
                 racha = 0,
                 burbujas = nuevasBurbujas
             )
-
             viewModelScope.launch {
-                delay(500) // Mostrar animación de error durante 500ms
+                delay(500)
                 _estado.value = _estado.value.copy(
                     burbujas = _estado.value.burbujas.filter { it.id != burbuja.id }
                 )
@@ -273,9 +289,10 @@ class GameViewModel : ViewModel() {
         }
     }
 
-
-
-    private fun terminarJuego(tabla: Int, onJuegoTerminado: (puntaje: Int, estrellas: Int) -> Unit) {
+    private fun terminarJuego(
+        tabla: Int,
+        onJuegoTerminado: (puntaje: Int, estrellas: Int, multiplesPerdidos: List<Int>) -> Unit
+    ) {
         if (!juegoActivo) return
         juegoActivo = false
         timerJob?.cancel()
@@ -287,7 +304,7 @@ class GameViewModel : ViewModel() {
             _estado.value.puntaje >= 50 -> 1
             else -> 0
         }
-        onJuegoTerminado(_estado.value.puntaje, estrellas)
+        onJuegoTerminado(_estado.value.puntaje, estrellas, _estado.value.multiplesPerdidos)
     }
 
     override fun onCleared() {
@@ -297,11 +314,6 @@ class GameViewModel : ViewModel() {
         bubbleJob?.cancel()
         gameLoopJob?.cancel()
     }
-
-
-
-
-
 }
 
 
@@ -354,7 +366,7 @@ fun MenuScreen(navController: NavController) {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(11) { index ->
+                items(12) { index ->
                     val tabla = index + 2
                     BotonTabla(
                         tabla = tabla,
@@ -396,8 +408,8 @@ fun GameScreen(
 
     // Iniciar el juego al entrar a la pantalla
     LaunchedEffect(key1 = tabla) {
-        viewModel.iniciarJuego(tabla) { puntaje, estrellas ->
-            navController.navigate("resultados/$puntaje/$estrellas/$tabla") {
+        viewModel.iniciarJuego(tabla) { puntaje, estrellas, multiplesPerdidos ->
+            navController.navigate("resultados/$puntaje/$estrellas/$tabla?multiplesPerdidos=${estado.multiplesPerdidos.joinToString(",")}") {
                 popUpTo("menu")
             }
         }
@@ -467,8 +479,8 @@ fun GameScreen(
                         viewModel.tocarBurbuja(
                             burbuja = burbuja,
                             tabla = tabla,
-                            onJuegoTerminado = { puntaje, estrellas ->
-                                navController.navigate("resultados/$puntaje/$estrellas/$tabla") {
+                            onJuegoTerminado = { puntaje, estrellas,multiplesPerdidos ->
+                                navController.navigate("resultados/$puntaje/$estrellas/$tabla?multiplesPerdidos=${multiplesPerdidos.joinToString(",")}") {
                                     popUpTo("menu")
                                 }
                             },
@@ -642,7 +654,8 @@ fun ResultsScreen(
     navController: NavController,
     puntaje: Int,
     estrellas: Int,
-    tabla: Int
+    tabla: Int,
+    multiplesPerdidos: List<Int> = emptyList()
 ) {
     Box(
         modifier = Modifier
@@ -691,6 +704,29 @@ fun ResultsScreen(
                 text = stringResource(id = R.string.stars_emoji).repeat(estrellas),
                 fontSize = 32.sp
             )
+
+            // 👇 Nueva sección: Mostrar los múltiplos que escaparon
+            if (multiplesPerdidos.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(32.dp))
+                Text(
+                    text = stringResource(id = R.string.multiples_missed_title),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colorResource(id = R.color.text_white),
+                    textAlign = TextAlign.Center
+                )
+                multiplesPerdidos.sorted().forEach { numero ->
+                    val factor = numero / tabla
+                    Text(
+                        text = "$tabla x $factor = $numero",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colorResource(id = R.color.text_gray),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(48.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Button(
