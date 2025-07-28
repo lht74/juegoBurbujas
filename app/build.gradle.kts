@@ -62,7 +62,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview") // Preview en Android Studio
     implementation("androidx.compose.ui:ui-graphics") // Necesario para graphicsLayer
-
+    implementation("androidx.compose.ui:ui-text") // Necesario para TextStyle
     // 🧱 Material Design - Selecciona solo uno:
     implementation("androidx.compose.material3:material3") // Material 3 (recomendado)
     // implementation("androidx.compose.material:material") // Material 1 (opcional si necesitas Text u otros elementos heredados)

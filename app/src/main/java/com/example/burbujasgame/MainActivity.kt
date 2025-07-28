@@ -6,14 +6,45 @@ import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.*
 import androidx.compose.animation.animateColor
-import androidx.compose.foundation.*
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -21,10 +52,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.ParagraphStyle
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -506,7 +544,6 @@ fun GameScreen(
     }
 }
 
-
 @Composable
 fun ComponenteBurbuja(
     burbuja: Burbuja,
@@ -516,39 +553,48 @@ fun ComponenteBurbuja(
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "")
 
-    // Rotación continua
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 4000, easing = LinearEasing)
-        ),
-        label = ""
-    )
-
-    // Gradiente dinámico de fondo
-    val animatedColor by infiniteTransition.animateColor(
-        initialValue = burbuja.color.copy(alpha = 0.6f),
-        targetValue = burbuja.color.copy(alpha = 0.9f),
-        animationSpec = infiniteRepeatable(
-            animation = tween(3000),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = ""
-    )
-
-    // Brillo animado del reflejo
-    val brilloAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 0.6f,
+    val animRotationZ by infiniteTransition.animateFloat(
+        initialValue = -45f,
+        targetValue = 45f,
         animationSpec = infiniteRepeatable(
             animation = tween(2000, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
+        label = "RotationZ_Oscillating"
+    )
+    val animRotationX by infiniteTransition.animateFloat(
+        -10f, 10f,
+        animationSpec = infiniteRepeatable(tween(2000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = ""
+    )
+    val animRotationY by infiniteTransition.animateFloat(
+        -15f, 15f,
+        animationSpec = infiniteRepeatable(tween(2500, easing = LinearEasing), RepeatMode.Reverse),
+        label = ""
+    )
+    val animatedColor by infiniteTransition.animateColor(
+        initialValue = burbuja.color.copy(alpha = 0.6f),
+        targetValue = burbuja.color.copy(alpha = 0.9f),
+        animationSpec = infiniteRepeatable(tween(3000), RepeatMode.Reverse),
+        label = ""
+    )
+    val brilloAlpha by infiniteTransition.animateFloat(
+        0.2f, 0.6f,
+        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing), RepeatMode.Reverse),
         label = ""
     )
 
-    val baseSize = 60.dp
+    val pulsate by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "TextPulsate"
+    )
+
+    val baseSize = 80.dp
     val scaleFactor = remember { Random.nextDouble(1.0, 1.5).toFloat() }
     val bubbleSize = baseSize * scaleFactor
 
@@ -559,7 +605,6 @@ fun ComponenteBurbuja(
         label = ""
     )
 
-    // Halo rojo animado cuando hay error
     val haloAlpha = remember { Animatable(0f) }
     if (burbuja.mostrarError) {
         LaunchedEffect(burbuja.id) {
@@ -582,7 +627,6 @@ fun ComponenteBurbuja(
             .scale(animatedClickScale),
         contentAlignment = Alignment.Center
     ) {
-        // Halo rojo (solo si mostrarError)
         if (burbuja.mostrarError) {
             Box(
                 modifier = Modifier
@@ -593,47 +637,53 @@ fun ComponenteBurbuja(
             )
         }
 
-        // Fondo rotante con gradiente
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .graphicsLayer {
-                    rotationZ = rotation
-                    transformOrigin = TransformOrigin.Center
+                    rotationZ = animRotationZ
+                    rotationX = animRotationX
+                    rotationY = animRotationY
+                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                    cameraDistance = 12f
                 }
-                .clip(CircleShape)
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            animatedColor,
-                            burbuja.color.copy(alpha = 0.4f)
-                        ),
-                        radius = 100f
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                animatedColor,
+                                burbuja.color.copy(alpha = 0.4f)
+                            ),
+                            radius = 80f
+                        )
                     )
+                    .border(width = 2.dp, color = Color.White.copy(alpha = 0.3f), shape = CircleShape)
+                    .clickable { onClick(); clicked = true },
+                contentAlignment = Alignment.Center
+            ) {
+                // Número estilizado
+                Text(
+                    text = burbuja.numero.toString(),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.SansSerif,
+                    style = TextStyle(
+                        brush = Brush.linearGradient(colors = listOf(Color.White, Color.Cyan)),
+                        shadow = Shadow(
+                            color = burbuja.color.copy(alpha = 0.5f),
+                            offset = Offset(2f, 2f),
+                            blurRadius = 6f
+                        )
+                    ),
+                    modifier = Modifier.scale(pulsate)
                 )
-                .border(width = 2.dp, color = Color.White.copy(alpha = 0.3f), shape = CircleShape)
-                .clickable {
-                    onClick()
-                    clicked = true
-                }
-        )
+            }
+        }
 
-        // Número
-        Text(
-            text = burbuja.numero.toString(),
-            fontSize = 26.sp,
-            fontWeight = FontWeight.ExtraBold,
-            style = TextStyle(
-                shadow = Shadow(
-                    color = Color.White,
-                    offset = Offset(0f, 0f),
-                    blurRadius = 10f
-                )
-            ),
-            color = Color.White
-        )
-
-        // Reflejo
         Box(
             modifier = Modifier
                 .offset(x = 15.dp, y = (-15).dp)
@@ -715,7 +765,7 @@ fun ResultsScreen(
                     color = colorResource(id = R.color.text_white),
                     textAlign = TextAlign.Center
                 )
-                multiplesPerdidos.sorted().forEach { numero ->
+                multiplesPerdidos.sorted().toSet().forEach { numero ->
                     val factor = numero / tabla
                     Text(
                         text = "$tabla x $factor = $numero",
