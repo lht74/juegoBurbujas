@@ -30,3 +30,9 @@ local.properties
 # Other
 captures/
 .DS_Store
+
+# Kotlin
+.kotlinc/
+.kotlin/
+*.kotlin_metadata
+*.kotlin_builtins
