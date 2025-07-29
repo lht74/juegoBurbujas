@@ -1,34 +1,38 @@
-# Gradle files
+# Created by Gemini for Android Projects
+
+# Gradle
 .gradle/
 build/
 
-# Local configuration file (sdk path, etc)
+# Local configuration
 local.properties
 
-# Log/OS Files
-*.log
-
-# Android Studio generated files and folders
-captures/
-.externalNativeBuild/
-.cxx/
-*.aab
-*.apk
-output-metadata.json
-
-# IntelliJ
+# IDE files (Android Studio)
 *.iml
 .idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
+!.idea/misc.xml
+!/.idea/inspectionProfiles/
+!/.idea/runConfigurations/
 
-# Keystore files
-*.jks
-*.keystore
+# Distribution files
+*.apk
+*.aab
+*.ap_
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
-# Android Profiling
+# Profiler files
 *.hprof
+*.hprof-conv
+
+# Native build files
+.cxx/
+.externalNativeBuild/
+
+# Other
+captures/
+.DS_Store
+
+# Kotlin
+.kotlinc/
+.kotlin/
+*.kotlin_metadata
+*.kotlin_builtins
